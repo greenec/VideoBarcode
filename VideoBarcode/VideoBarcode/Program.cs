@@ -12,7 +12,7 @@ namespace VideoBarcode
         static void Main(string[] args)
         {
             string sVideoFile = @"C:\Users\Connor\Desktop\1917.mp4";
-            string sGradientFile = @"C:\Users\Connor\Desktop\1917_gradient.jpg";
+            string sGradientFile = @"C:\Users\Connor\Desktop\1917.jpg";
 
             var colors = new List<Color>();
 
@@ -100,7 +100,6 @@ namespace VideoBarcode
                     Positions = positions
                 };
 
-                brush.SetSigmaBellShape(0.5f);
                 graphics.FillRectangle(brush, new Rectangle(0, 0, width, height));
                 bitmap.Save(sGradientFile, ImageFormat.Jpeg);
             }
