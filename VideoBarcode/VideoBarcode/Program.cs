@@ -1,5 +1,4 @@
-﻿using Accord.Math;
-using Accord.Video.FFMPEG;
+﻿using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -17,44 +16,54 @@ namespace VideoBarcode
 
             var colors = new List<Color>();
 
-            using (var vFReader = new VideoFileReader())
+            // Opens MP4 file (ffmpeg is probably needed)
+            var capture = new VideoCapture(sVideoFile);
+
+            // Frame image buffer
+            var image = new Mat<Vec3b>();
+
+            int f = 0;
+
+            // When the movie playback reaches end, Mat.data becomes NULL.
+            while (true)
             {
-                vFReader.Open(sVideoFile);
-
-                for (Rational f = 0; f < vFReader.FrameCount; f += vFReader.FrameRate * 300)
+                capture.Read(image); // same as cvQueryFrame
+                if (image.Empty())
                 {
-                    Bitmap frame = vFReader.ReadVideoFrame((int)f);
-
-                    var averageColor = AverageColorOfThumbnail(frame);
-                    colors.Add(averageColor);
-
-                    // display progress
-                    double progress = Math.Round(100.0 * (double)f / vFReader.FrameCount, 2);
-                    Console.WriteLine($"Progress: {progress}%");
+                    break;
                 }
 
-                vFReader.Close();
+                var averageColor = AverageColorOfThumbnail(image);
+                colors.Add(averageColor);
+
+                // display progress
+                double progress = Math.Round(100.0 * f / capture.FrameCount, 2);
+                Console.WriteLine($"Progress: {progress}%");
+
+                f++;
             }
 
             CreateGradient(sGradientFile, colors.ToArray(), 1080, 1920);
         }
 
-        private static Color AverageColorOfThumbnail(Bitmap bitmap)
+        private static Color AverageColorOfThumbnail(Mat<Vec3b> bitmap)
         {
             // accumulators used to sum pixel color channels
             long redSum = 0;
             long greenSum = 0;
             long blueSum = 0;
 
+            var indexer = bitmap.GetIndexer();
+
             for (int y = 0; y < bitmap.Height; y++)
             {
                 for (int x = 0; x < bitmap.Width; x++)
                 {
-                    var pixel = bitmap.GetPixel(x, y);
+                    Vec3b color = indexer[y, x];
 
-                    redSum += pixel.R;
-                    greenSum += pixel.G;
-                    blueSum += pixel.B;
+                    blueSum += color.Item0;
+                    greenSum += color.Item1;
+                    redSum += color.Item2;
                 }
             }
 
@@ -81,7 +90,7 @@ namespace VideoBarcode
 
                 for (int i = 0; i < positions.Length; i++)
                 {
-                    positions[i] = position;
+                    positions[i] = Math.Min(position, 1f);
                     position += step;
                 }
 
