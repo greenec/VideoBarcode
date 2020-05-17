@@ -1,9 +1,13 @@
-﻿using OpenCvSharp;
+﻿using Newtonsoft.Json;
+using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace VideoBarcode
 {
@@ -12,76 +16,126 @@ namespace VideoBarcode
         static void Main(string[] args)
         {
             string sVideoFile = @"C:\Users\Connor\Desktop\1917.mp4";
+            string sJsonFile = @"C:\Users\Connor\Desktop\1917.json";
             string sGradientFile = @"C:\Users\Connor\Desktop\1917.jpg";
 
-            var colors = new List<Color>();
-
-            // Opens MP4 file (ffmpeg is probably needed)
+            // opens the video file (ffmpeg is probably needed)
             var capture = new VideoCapture(sVideoFile);
 
-            // Frame image buffer
-            var image = new Mat<Vec3b>();
+            Console.WriteLine($"Processing {Path.GetFileName(sVideoFile)}...");
+            Console.WriteLine($"Duration: {TimeSpan.FromSeconds(capture.FrameCount / capture.Fps)}");
 
-            int f = 0;
+            List<Color> averageColors;
 
-            // When the movie playback reaches end, Mat.data becomes NULL.
+            // use the JSON file of average colors if it exists, otherwise compute a new list from the capture
+            if (File.Exists(sJsonFile))
+            {
+                averageColors = JsonConvert.DeserializeObject<List<Color>>(File.ReadAllText(sJsonFile));
+            }
+            else
+            {
+                averageColors = AverageColorsOfCapture(capture);
+            }
+
+            // serialize the average colors list and write it to a file
+            File.WriteAllText(sJsonFile, JsonConvert.SerializeObject(averageColors));
+
+            CreateGradient(sGradientFile, averageColors.ToArray(), 2000, 8000);
+        }
+
+        private static List<Color> AverageColorsOfCapture(VideoCapture capture)
+        {
+            // this list represents the average color of every frame of the video
+            var averageColors = new List<Color>();
+
+            // frame image buffers
+            var images = new Mat<Vec3b>[Environment.ProcessorCount].Select(i => new Mat<Vec3b>()).ToArray();
+
+            int frameIdx = 0;
+            bool finished = false;
+
+            // the list of tasks to find the average color of a frame, one for each logical processor
+            var tasks = new List<Task<Color>>();
+
             while (true)
             {
-                capture.Read(image); // same as cvQueryFrame
-                if (image.Empty())
+                // read one frame for each thread
+                for (int i = 0; i < Environment.ProcessorCount; i++)
+                {
+                    capture.Read(images[i]);
+
+                    if (images[i].Empty())
+                    {
+                        finished = true;
+                        break;
+                    }
+
+                    tasks.Add(AverageColorOfThumbnail(images[i]));
+
+                    frameIdx++;
+                }
+
+                // schedule all of the average frame color tasks
+                Task.WaitAll(tasks.ToArray());
+
+                // add the results to the running list of average colors
+                averageColors.AddRange(tasks.Select(t => t.Result));
+
+                if (finished)
                 {
                     break;
                 }
 
-                var averageColor = AverageColorOfThumbnail(image);
-                colors.Add(averageColor);
+                // display progress, formatted to two decimal places
+                float progress = (float)frameIdx / capture.FrameCount;
+                Console.SetCursorPosition(0, 2);
+                Console.WriteLine($"Progress: {string.Format("{0:0.00}", progress * 100.0)}%");
 
-                // display progress
-                double progress = Math.Round(100.0 * f / capture.FrameCount, 2);
-                Console.WriteLine($"Progress: {progress}%");
-
-                f++;
+                tasks.Clear();
             }
 
-            CreateGradient(sGradientFile, colors.ToArray(), 1080, 1920);
+            return averageColors;
         }
 
-        private static Color AverageColorOfThumbnail(Mat<Vec3b> bitmap)
+        private static Task<Color> AverageColorOfThumbnail(Mat<Vec3b> image)
         {
-            // accumulators used to sum pixel color channels
-            long redSum = 0;
-            long greenSum = 0;
-            long blueSum = 0;
-
-            var indexer = bitmap.GetIndexer();
-
-            for (int y = 0; y < bitmap.Height; y++)
+            return Task.Run(() =>
             {
-                for (int x = 0; x < bitmap.Width; x++)
+                // accumulators used to sum pixel color channels
+                long redSum = 0;
+                long greenSum = 0;
+                long blueSum = 0;
+
+                var indexer = image.GetIndexer();
+
+                for (int y = 0; y < image.Height; y++)
                 {
-                    Vec3b color = indexer[y, x];
+                    for (int x = 0; x < image.Width; x++)
+                    {
+                        Vec3b color = indexer[y, x];
 
-                    blueSum += color.Item0;
-                    greenSum += color.Item1;
-                    redSum += color.Item2;
+                        blueSum += color.Item0;
+                        greenSum += color.Item1;
+                        redSum += color.Item2;
+                    }
                 }
-            }
 
-            long numPixels = bitmap.Width * bitmap.Height;
+                long numPixels = image.Width * image.Height;
 
-            // average colors out by the total number of pixels
-            int averageRed = (int)(redSum / numPixels);
-            int averageGreen = (int)(greenSum / numPixels);
-            int averageBlue = (int)(blueSum / numPixels);
+                // average colors out by the total number of pixels
+                int averageRed = (int)(redSum / numPixels);
+                int averageGreen = (int)(greenSum / numPixels);
+                int averageBlue = (int)(blueSum / numPixels);
 
-            return Color.FromArgb(averageRed, averageGreen, averageBlue);
+                return Color.FromArgb(averageRed, averageGreen, averageBlue);
+            });
         }
 
         private static void CreateGradient(string sGradientFile, Color[] colors, int height, int width)
         {
             using (Bitmap bitmap = new Bitmap(width, height))
             using (Graphics graphics = Graphics.FromImage(bitmap))
-            using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, width, height), Color.Blue, Color.Red, LinearGradientMode.Horizontal))
+            using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, width, height), colors.First(), colors.Last(), LinearGradientMode.Horizontal))
             {
                 var positions = new float[colors.Length];
 
