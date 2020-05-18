@@ -3,7 +3,6 @@ using OpenCvSharp;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
@@ -15,9 +14,11 @@ namespace VideoBarcode
     {
         static void Main(string[] args)
         {
-            string sVideoFile = @"C:\Users\Connor\Desktop\1917.mp4";
-            string sJsonFile = @"C:\Users\Connor\Desktop\1917.json";
-            string sGradientFile = @"C:\Users\Connor\Desktop\1917.jpg";
+            string sDirectory = @"C:\Users\Connor\Desktop\avatar";
+
+            string sVideoFile = Path.Combine(sDirectory, "Avatar (2009).mp4");
+            string sJsonFile = Path.Combine(sDirectory, "avatar.json");
+            string sGradientFile = Path.Combine(sDirectory, "avatar.jpg");
 
             // opens the video file (ffmpeg is probably needed)
             var capture = new VideoCapture(sVideoFile);
@@ -40,7 +41,11 @@ namespace VideoBarcode
             // serialize the average colors list and write it to a file
             File.WriteAllText(sJsonFile, JsonConvert.SerializeObject(averageColors));
 
-            CreateGradient(sGradientFile, averageColors.ToArray(), 2000, 8000);
+            var summarizedColors = SummarizeColorsByTime(averageColors, (int)Math.Round(capture.Fps));
+
+            WriteHistogram(sGradientFile, summarizedColors, summarizedColors.Length / 4, summarizedColors.Length);
+
+            Console.WriteLine("\nFinished.");
         }
 
         private static List<Color> AverageColorsOfCapture(VideoCapture capture)
@@ -70,7 +75,7 @@ namespace VideoBarcode
                         break;
                     }
 
-                    tasks.Add(AverageColorOfThumbnail(images[i]));
+                    tasks.Add(AverageFrameColorHSV(images[i]));
 
                     frameIdx++;
                 }
@@ -88,8 +93,7 @@ namespace VideoBarcode
 
                 // display progress, formatted to two decimal places
                 float progress = (float)frameIdx / capture.FrameCount;
-                Console.SetCursorPosition(0, 2);
-                Console.WriteLine($"Progress: {string.Format("{0:0.00}", progress * 100.0)}%");
+                Console.Write($"\rProgress: {string.Format("{0:0.00}", progress * 100.0)}%");
 
                 tasks.Clear();
             }
@@ -97,14 +101,17 @@ namespace VideoBarcode
             return averageColors;
         }
 
-        private static Task<Color> AverageColorOfThumbnail(Mat<Vec3b> image)
+        private static Task<Color> AverageFrameColorHSV(Mat<Vec3b> image)
         {
             return Task.Run(() =>
             {
-                // accumulators used to sum pixel color channels
-                long redSum = 0;
-                long greenSum = 0;
-                long blueSum = 0;
+                // accumulators for hue, saturation, and value
+                var hueCounts = new int[360];
+                var saturationAccum = new float[360];
+                var valueAccum = new float[360];
+
+                int hue;
+                float saturation, value;
 
                 var indexer = image.GetIndexer();
 
@@ -112,49 +119,97 @@ namespace VideoBarcode
                 {
                     for (int x = 0; x < image.Width; x++)
                     {
-                        Vec3b color = indexer[y, x];
+                        Vec3b pixel = indexer[y, x];
 
-                        blueSum += color.Item0;
-                        greenSum += color.Item1;
-                        redSum += color.Item2;
+                        // var color = Color.FromArgb(pixel.Item2, pixel.Item1, pixel.Item0);
+                        // ColorHelp.ColorToHSV(color, out double dHue, out saturation, out value);
+
+                        ColorHelp.RGBtoHSV(pixel.Item2, pixel.Item1, pixel.Item0, out float h, out float s, out float v);
+
+                        hue = (int)h;
+
+                        hueCounts[hue] += 1;
+                        saturationAccum[hue] += s;
+                        valueAccum[hue] += v;
                     }
                 }
 
-                long numPixels = image.Width * image.Height;
+                // smooth out the hue array by adding neigboring hues
+                var smoothHueCounts = SmoothArray(hueCounts, 10);
 
-                // average colors out by the total number of pixels
-                int averageRed = (int)(redSum / numPixels);
-                int averageGreen = (int)(greenSum / numPixels);
-                int averageBlue = (int)(blueSum / numPixels);
+                // compute the average hue, saturation, and value
+                hue = Array.IndexOf(smoothHueCounts, smoothHueCounts.Max());
+                saturation = saturationAccum[hue] / hueCounts[hue];
+                value = valueAccum[hue] / hueCounts[hue];
 
-                return Color.FromArgb(averageRed, averageGreen, averageBlue);
+                if (double.IsNaN(saturation))
+                {
+                    saturation = 0;
+                }
+
+                if (double.IsNaN(value))
+                {
+                    value = 0;
+                }
+
+                ColorHelp.HSVtoRGB(out float r, out float g, out float b, hue, saturation, value);
+                return Color.FromArgb((int)r, (int)g, (int)b);
             });
         }
 
-        private static void CreateGradient(string sGradientFile, Color[] colors, int height, int width)
+        private static int[] SmoothArray(int[] inputArr, int factor)
+        {
+            var outputArr = new int[inputArr.Length];
+
+            for (int i = 0; i < inputArr.Length; i++)
+            {
+                int start = Math.Max(0, i - factor);
+                int end = Math.Min(inputArr.Length - 1, i + factor);
+
+                outputArr[i] = inputArr.Skip(start).Take(end - start + 1).Sum();
+            }
+
+            return outputArr;
+        }
+
+        private static Color[] SummarizeColorsByTime(List<Color> colors, int fps)
+        {
+            int totalFrames = colors.Count;
+            int numGroups = (int)Math.Ceiling((double)totalFrames / fps);
+
+            var colorGroups = new List<Color>[numGroups].Select(s => new List<Color>()).ToArray();
+
+            for (int i = 0; i < totalFrames; i++)
+            {
+                colorGroups[i / fps].Add(colors[i]);
+            }
+
+            return colorGroups.Select(g =>
+            {
+                int averageRed = (int)g.Average(c => c.R);
+                int averageGreen = (int)g.Average(c => c.G);
+                int averageBlue = (int)g.Average(c => c.B);
+
+                return Color.FromArgb(averageRed, averageGreen, averageBlue);
+            }).ToArray();
+        }
+
+        private static void WriteHistogram(string sGradientFile, Color[] colors, int height, int width)
         {
             using (Bitmap bitmap = new Bitmap(width, height))
             using (Graphics graphics = Graphics.FromImage(bitmap))
-            using (LinearGradientBrush brush = new LinearGradientBrush(new Rectangle(0, 0, width, height), colors.First(), colors.Last(), LinearGradientMode.Horizontal))
             {
-                var positions = new float[colors.Length];
-
-                float position = 0;
-                float step = 1f / (positions.Length - 1);
-
-                for (int i = 0; i < positions.Length; i++)
+                for (int i = 0; i < colors.Length; i++)
                 {
-                    positions[i] = Math.Min(position, 1f);
-                    position += step;
+                    var color = colors[i];
+                    var pen = new Pen(color, 1);
+
+                    PointF start = new PointF(i, 0);
+                    PointF end = new PointF(i, height);
+
+                    graphics.DrawLine(pen, start, end);
                 }
 
-                brush.InterpolationColors = new ColorBlend(colors.Length)
-                {
-                    Colors = colors,
-                    Positions = positions
-                };
-
-                graphics.FillRectangle(brush, new Rectangle(0, 0, width, height));
                 bitmap.Save(sGradientFile, ImageFormat.Jpeg);
             }
         }
