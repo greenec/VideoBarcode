@@ -14,24 +14,28 @@ namespace VideoBarcode
     {
         static void Main(string[] args)
         {
-            string sDirectory = @"C:\Users\Connor\Desktop\avatar";
+            string sDirectory = @"C:\Users\tancz\Desktop\Vidbarcode";
 
-            string sVideoFile = Path.Combine(sDirectory, "Avatar (2009).mp4");
-            string sJsonFile = Path.Combine(sDirectory, "avatar.json");
-            string sGradientFile = Path.Combine(sDirectory, "avatar.jpg");
-
+            string sVideoFile = Path.Combine(sDirectory, @"E:\Movies_Plex\Movies\Frozen 2 (2019).avi");
+            string sJsonFile = Path.Combine(sDirectory, "frozen2.json");
+            string sGradientFile = Path.Combine(sDirectory, "frozen2.jpg");
+            /*
+            string sVideoFile = Path.Combine(sDirectory, @"C:\Users\tancz\Desktop\ShortVideos\infinity_war_trailer.mp4");
+            string sJsonFile = Path.Combine(sDirectory, "infinity_war_trailer.json");
+            string sGradientFile = Path.Combine(sDirectory, "infinity_war_trailer.jpg");
+            */
             // opens the video file (ffmpeg is probably needed)
             var capture = new VideoCapture(sVideoFile);
 
             Console.WriteLine($"Processing {Path.GetFileName(sVideoFile)}...");
             Console.WriteLine($"Duration: {TimeSpan.FromSeconds(capture.FrameCount / capture.Fps)}");
 
-            List<Color> averageColors;
+            List<ColorSpan> averageColors;
 
             // use the JSON file of average colors if it exists, otherwise compute a new list from the capture
             if (File.Exists(sJsonFile))
             {
-                averageColors = JsonConvert.DeserializeObject<List<Color>>(File.ReadAllText(sJsonFile));
+                averageColors = JsonConvert.DeserializeObject<List<ColorSpan>>(File.ReadAllText(sJsonFile));
             }
             else
             {
@@ -41,17 +45,17 @@ namespace VideoBarcode
             // serialize the average colors list and write it to a file
             File.WriteAllText(sJsonFile, JsonConvert.SerializeObject(averageColors));
 
-            var summarizedColors = SummarizeColorsByTime(averageColors, (int)Math.Round(capture.Fps));
+            var summarizedColors = averageColors; // SummarizeColorsByTime(averageColors, (int)Math.Round(capture.Fps));
 
-            WriteHistogram(sGradientFile, summarizedColors, summarizedColors.Length / 4, summarizedColors.Length);
+            WriteHistogram(sGradientFile, averageColors, 256, averageColors.Count);
 
             Console.WriteLine("\nFinished.");
         }
 
-        private static List<Color> AverageColorsOfCapture(VideoCapture capture)
+        private static List<ColorSpan> AverageColorsOfCapture(VideoCapture capture)
         {
             // this list represents the average color of every frame of the video
-            var averageColors = new List<Color>();
+            var averageColors = new List<ColorSpan>();
 
             // frame image buffers
             var images = new Mat<Vec3b>[Environment.ProcessorCount].Select(i => new Mat<Vec3b>()).ToArray();
@@ -60,14 +64,15 @@ namespace VideoBarcode
             bool finished = false;
 
             // the list of tasks to find the average color of a frame, one for each logical processor
-            var tasks = new List<Task<Color>>();
+            var tasks = new List<Task<ColorSpan>>();
 
             while (true)
             {
                 // read one frame for each thread
                 for (int i = 0; i < Environment.ProcessorCount; i++)
                 {
-                    capture.Read(images[i]);
+                    for (int k = 0; k < 24; k++)
+                        capture.Read(images[i]);
 
                     if (images[i].Empty())
                     {
@@ -75,7 +80,7 @@ namespace VideoBarcode
                         break;
                     }
 
-                    tasks.Add(AverageFrameColorHSV(images[i]));
+                    tasks.Add(KMColorAnalyzer.ProcessFrame(images[i]));
 
                     frameIdx++;
                 }
@@ -84,7 +89,7 @@ namespace VideoBarcode
                 Task.WaitAll(tasks.ToArray());
 
                 // add the results to the running list of average colors
-                averageColors.AddRange(tasks.Select(t => t.Result));
+                averageColors.AddRange(tasks.Where(t => t.Result != null).Select(t => t.Result));
 
                 if (finished)
                 {
@@ -98,6 +103,7 @@ namespace VideoBarcode
                 tasks.Clear();
             }
 
+            //return averageColors.Select(cspan => cspan.Color[0]).ToList();
             return averageColors;
         }
 
@@ -194,20 +200,27 @@ namespace VideoBarcode
             }).ToArray();
         }
 
-        private static void WriteHistogram(string sGradientFile, Color[] colors, int height, int width)
+        private static void WriteHistogram(string sGradientFile, List<ColorSpan> colors, int height, int width)
         {
             using (Bitmap bitmap = new Bitmap(width, height))
             using (Graphics graphics = Graphics.FromImage(bitmap))
             {
-                for (int i = 0; i < colors.Length; i++)
+                for (int i = 0; i < colors.Count; i++)
                 {
-                    var color = colors[i];
-                    var pen = new Pen(color, 1);
+                    var colorspan = colors[i];
 
-                    PointF start = new PointF(i, 0);
-                    PointF end = new PointF(i, height);
+                    int offsety = 0;
+                    for (int k = 0; k < colorspan.Color.Count; k++)
+                    {
+                        var pen = new Pen(colorspan.Color[k], 1);
 
-                    graphics.DrawLine(pen, start, end);
+                        PointF start = new PointF(i, offsety);
+                        PointF end = new PointF(i, Math.Min(height, offsety + height * colorspan.Span[k]));
+
+                        offsety += (int)(height * colorspan.Span[k]);
+
+                        graphics.DrawLine(pen, start, end);
+                    }
                 }
 
                 bitmap.Save(sGradientFile, ImageFormat.Jpeg);
