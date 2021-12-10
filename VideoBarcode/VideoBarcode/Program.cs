@@ -14,11 +14,11 @@ namespace VideoBarcode
     {
         static void Main(string[] args)
         {
-            string sDirectory = @"C:\Users\Connor\Desktop\avatar";
+            string sDirectory = @"C:\Users\Connor\Desktop\Video Barcode\Revenge of the Sith";
 
-            string sVideoFile = Path.Combine(sDirectory, "Avatar (2009).mp4");
-            string sJsonFile = Path.Combine(sDirectory, "avatar.json");
-            string sGradientFile = Path.Combine(sDirectory, "avatar.jpg");
+            string sVideoFile = Path.Combine(sDirectory, "Star Wars Episode 3 - Revenge of The Sith (2005).mp4");
+            string sJsonFile = Path.Combine(sDirectory, "Revenge of the Sith.json");
+            string sGradientFile = Path.Combine(sDirectory, "Revenge of the Sith.jpg");
 
             // opens the video file (ffmpeg is probably needed)
             var capture = new VideoCapture(sVideoFile);
