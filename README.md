@@ -1,5 +1,12 @@
 # Video Barcode
 
+This was a weekend project done in C# to create a histogram or "video barcode" representing the average colors of
+the frames in a movie, where every pixel is a second of the film (24 frames). In samples/avatar.jpg, the file is
+10,679 px wide, which is equivalent to 178 minutes.
+
+Some files were computed using the average RGB values, but these images are less vibrant. The better looking images
+instead use an HSV averaging approach [@tancoszm](https://github.com/tanczosm) suggested. Separating lightness and
+darkness from color and focusing on the hue allows for colors to avoid becoming washed out in dark scenes. 
 
 ## Samples
 
