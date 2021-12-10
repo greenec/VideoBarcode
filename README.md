@@ -16,12 +16,6 @@ darkness from color and focusing on the hue allows for colors to avoid becoming 
 ### Avatar
 ![](samples/avatar.jpg)
 
-### Baby Driver (RGB Method)
-![](samples/baby_driver_rgb_method.jpg)
-
-### Avengers: Endgame
-![](samples/endgame.jpg)
-
 ### The Fifth Element
 ![](samples/fifth_element.jpg)
 
@@ -36,4 +30,10 @@ darkness from color and focusing on the hue allows for colors to avoid becoming 
 
 ### Speed Racer
 ![](samples/speed_racer.jpg)
+
+### Avengers: Endgame (RGB Method)
+![](samples/endgame.jpg)
+
+### Baby Driver (RGB Method)
+![](samples/baby_driver_rgb_method.jpg)
 
