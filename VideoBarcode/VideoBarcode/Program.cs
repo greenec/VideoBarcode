@@ -1,12 +1,8 @@
-﻿using Newtonsoft.Json;
-using OpenCvSharp;
-using System;
-using System.Collections.Generic;
-using System.Drawing;
+﻿using System.Drawing;
 using System.Drawing.Imaging;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Text.Json;
+using Newtonsoft.Json;
+using OpenCvSharp;
 
 namespace VideoBarcode
 {
@@ -14,24 +10,31 @@ namespace VideoBarcode
     {
         static void Main(string[] args)
         {
-            string sDirectory = @"C:\Users\Connor\Desktop\Video Barcode\Revenge of the Sith";
+            string directory = @"/Users/Connor/Desktop/Her";
 
-            string sVideoFile = Path.Combine(sDirectory, "Star Wars Episode 3 - Revenge of The Sith (2005).mp4");
-            string sJsonFile = Path.Combine(sDirectory, "Revenge of the Sith.json");
-            string sGradientFile = Path.Combine(sDirectory, "Revenge of the Sith.jpg");
+            string videoFilePath = Path.Combine(directory, "Her (2013).mp4");
+            string jsonFilePath = Path.Combine(directory, "Her.json");
+            string gradientFilePath = Path.Combine(directory, "Her.jpg");
+
+            if (!File.Exists(videoFilePath))
+            {
+                throw new InvalidOperationException($"{videoFilePath} not found");
+            }
 
             // opens the video file (ffmpeg is probably needed)
-            var capture = new VideoCapture(sVideoFile);
+            var capture = new VideoCapture(videoFilePath);
 
-            Console.WriteLine($"Processing {Path.GetFileName(sVideoFile)}...");
+            Console.WriteLine($"Processing {Path.GetFileName(videoFilePath)}...");
             Console.WriteLine($"Duration: {TimeSpan.FromSeconds(capture.FrameCount / capture.Fps)}");
 
             List<Color> averageColors;
 
             // use the JSON file of average colors if it exists, otherwise compute a new list from the capture
-            if (File.Exists(sJsonFile))
+            if (File.Exists(jsonFilePath))
             {
-                averageColors = JsonConvert.DeserializeObject<List<Color>>(File.ReadAllText(sJsonFile));
+                // averageColors = JsonSerializer.Deserialize<List<Color>>(File.ReadAllText(jsonFilePath))
+                averageColors = JsonConvert.DeserializeObject<List<Color>>(File.ReadAllText(jsonFilePath))
+                    ?? throw new InvalidOperationException("Failed to deserialize JSON file with color data");
             }
             else
             {
@@ -39,11 +42,12 @@ namespace VideoBarcode
             }
 
             // serialize the average colors list and write it to a file
-            File.WriteAllText(sJsonFile, JsonConvert.SerializeObject(averageColors));
+            // File.WriteAllText(jsonFilePath, JsonSerializer.Serialize(averageColors));
+            File.WriteAllText(jsonFilePath, JsonConvert.SerializeObject(averageColors));
 
             var summarizedColors = SummarizeColorsByTime(averageColors, (int)Math.Round(capture.Fps));
 
-            WriteHistogram(sGradientFile, summarizedColors, summarizedColors.Length / 4, summarizedColors.Length);
+            WriteHistogram(gradientFilePath, summarizedColors, summarizedColors.Length / 4, summarizedColors.Length);
 
             Console.WriteLine("\nFinished.");
         }
@@ -81,7 +85,7 @@ namespace VideoBarcode
                 }
 
                 // schedule all of the average frame color tasks
-                Task.WaitAll(tasks.ToArray());
+                Task.WaitAll([.. tasks]);
 
                 // add the results to the running list of average colors
                 averageColors.AddRange(tasks.Select(t => t.Result));
@@ -194,24 +198,23 @@ namespace VideoBarcode
             }).ToArray();
         }
 
-        private static void WriteHistogram(string sGradientFile, Color[] colors, int height, int width)
+        private static void WriteHistogram(string gradientFilePath, Color[] colors, int height, int width)
         {
-            using (Bitmap bitmap = new Bitmap(width, height))
-            using (Graphics graphics = Graphics.FromImage(bitmap))
+            using var bitmap = new Bitmap(width, height);
+            using var graphics = Graphics.FromImage(bitmap);
+
+            for (int i = 0; i < colors.Length; i++)
             {
-                for (int i = 0; i < colors.Length; i++)
-                {
-                    var color = colors[i];
-                    var pen = new Pen(color, 1);
+                var color = colors[i];
+                var pen = new Pen(color, 1);
 
-                    PointF start = new PointF(i, 0);
-                    PointF end = new PointF(i, height);
+                var start = new PointF(i, 0);
+                var end = new PointF(i, height);
 
-                    graphics.DrawLine(pen, start, end);
-                }
-
-                bitmap.Save(sGradientFile, ImageFormat.Jpeg);
+                graphics.DrawLine(pen, start, end);
             }
+
+            bitmap.Save(gradientFilePath, ImageFormat.Jpeg);
         }
     }
 }
