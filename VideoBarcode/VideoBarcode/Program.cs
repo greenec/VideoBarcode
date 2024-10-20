@@ -49,7 +49,7 @@ class Program
             File.WriteAllText(jsonFilePath, JsonSerializer.Serialize(averageColors.Select(c => c.ToPixel<Bgra32>().PackedValue).ToArray()));
         }
 
-        var summarizedColors = SummarizeColorsByTime(averageColors, (int)Math.Round(capture.Fps));
+        var summarizedColors = SummarizeColorsByTime(averageColors, Convert.ToInt32(Math.Round(capture.Fps)));
 
         WriteHistogram(gradientFilePath, summarizedColors, summarizedColors.Length / 4, summarizedColors.Length);
 
@@ -134,7 +134,7 @@ class Program
 
                     ColorHelp.RGBtoHSV(pixel.Item2, pixel.Item1, pixel.Item0, out float h, out float s, out float v);
 
-                    hue = (int)h;
+                    hue = Convert.ToInt32(h);
 
                     hueCounts[hue] += 1;
                     saturationAccum[hue] += s;
@@ -161,7 +161,7 @@ class Program
             }
 
             ColorHelp.HSVtoRGB(out float r, out float g, out float b, hue, saturation, value);
-            return Color.FromRgb((byte)r, (byte)g, (byte)b);
+            return Color.FromRgb(Convert.ToByte(r), Convert.ToByte(g), Convert.ToByte(b));
         });
     }
 
@@ -183,7 +183,7 @@ class Program
     private static Color[] SummarizeColorsByTime(List<Color> colors, int fps)
     {
         int totalFrames = colors.Count;
-        int numGroups = (int)Math.Ceiling((double)totalFrames / fps);
+        int numGroups = Convert.ToInt32(Math.Ceiling((double)totalFrames / fps));
 
         var colorGroups = new List<Bgra32>[numGroups].Select(s => new List<Bgra32>()).ToArray();
 
@@ -194,9 +194,9 @@ class Program
 
         return colorGroups.Select(g =>
         {
-            byte averageRed = (byte)g.Average(c => c.R);
-            byte averageGreen = (byte)g.Average(c => c.G);
-            byte averageBlue = (byte)g.Average(c => c.B);
+            byte averageRed = Convert.ToByte(g.Average(c => c.R));
+            byte averageGreen = Convert.ToByte(g.Average(c => c.G));
+            byte averageBlue = Convert.ToByte(g.Average(c => c.B));
 
             return Color.FromRgb(averageRed, averageGreen, averageBlue);
         }).ToArray();
