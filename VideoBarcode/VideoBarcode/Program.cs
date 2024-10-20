@@ -17,7 +17,7 @@ class Program
         string jsonFilePath = Path.Combine(directory, "Her.argb.uint.json");
         string gradientFilePath = Path.Combine(directory, "Her.jpg");
 
-        // opens the video file (ffmpeg is probably needed)
+        // opens the video file (ffmpeg may not be needed as long as the native bindings are available for the platform)
         var capture = new VideoCapture(videoFilePath);
 
         Console.WriteLine($"Processing {Path.GetFileName(videoFilePath)}...");
@@ -45,7 +45,7 @@ class Program
 
             // Serialize the average colors list and write it to a file.
             // Note that this is the "packed" color format used by ImageSharp, different from the bit-shifted ARGB int that System.Drawing.Color uses.
-            // From MSB to LSB, Bgra32 will be packed into the uint as 0xARGB
+            // From MSB to LSB, Bgra32 will be packed into the uint as 0xARGB. LSB to MSB is 0xBGRA, hence the type name.
             File.WriteAllText(jsonFilePath, JsonSerializer.Serialize(averageColors.Select(c => c.ToPixel<Bgra32>().PackedValue).ToArray()));
         }
 
@@ -134,7 +134,8 @@ class Program
 
                     ColorHelp.RGBtoHSV(pixel.Item2, pixel.Item1, pixel.Item0, out float h, out float s, out float v);
 
-                    hue = Convert.ToInt32(h);
+                    // Use cast instead of Convert because Convert will round up to 360 (out of bounds)
+                    hue = (int)h;
 
                     hueCounts[hue] += 1;
                     saturationAccum[hue] += s;
@@ -161,7 +162,7 @@ class Program
             }
 
             ColorHelp.HSVtoRGB(out float r, out float g, out float b, hue, saturation, value);
-            return Color.FromRgb(Convert.ToByte(r), Convert.ToByte(g), Convert.ToByte(b));
+            return Color.FromRgb((byte)r, (byte)g, (byte)b);
         });
     }
 
