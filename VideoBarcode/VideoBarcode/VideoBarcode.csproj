@@ -13,6 +13,7 @@
     <PackageReference Include="OpenCvSharp4" Version="4.3.0.20200421" />
     <PackageReference Include="OpenCvSharp4.runtime.win" version="4.3.0.20200421" />
     <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" />
+    <PackageReference Include="SixLabors.ImageSharp.Drawing" Version="2.1.4" />
   </ItemGroup>
 
 </Project>
