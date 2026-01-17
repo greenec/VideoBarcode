@@ -1,32 +1,26 @@
 ﻿namespace VideoBarcode;
 
-public static class ColorHelp
+internal static class ColorHelp
 {
     /*
      * RGB->HSV and HSV->RGB functions adapted from https://www.cs.rit.edu/~ncs/color/t_convert.html
      */
-
-    public static void RGBtoHSV(float r, float g, float b, out float h, out float s, out float v)
+    internal static (float H, float S, float V) RGBtoHSV(float r, float g, float b)
     {
-        float min, max, delta;
-        min = Math.Min(r, Math.Min(g, b));
-        max = Math.Max(r, Math.Max(g, b));
+        float min = Math.Min(r, Math.Min(g, b));
+        float max = Math.Max(r, Math.Max(g, b));
 
-        v = max;
-        delta = max - min;
-
-        if (max != 0)
-        {
-            s = delta / max;
-        }
-        else
+        float v = max;
+        if (max == 0)
         {
             // r = g = b = 0		// s = 0, v is undefined
-            s = 0;
-            h = 0;
-            return;
+            return (0, 0, 0);
         }
 
+        float delta = max - min;
+        float s = delta / max;
+
+        float h;
         if (r == max)
         {
             // between yellow & magenta
@@ -54,29 +48,30 @@ public static class ColorHelp
         {
             h = 0;
         }
+
+        return (h, s, v);
     }
 
-    public static void HSVtoRGB(out float r, out float g, out float b, float h, float s, float v)
+    internal static (float R, float G, float B) HSVtoRGB(float h, float s, float v)
     {
-        int i;
-        float f, p, q, t;
+        float r, g, b;
 
         if (s == 0)
         {
             // achromatic (grey)
             r = g = b = v;
-            return;
+            return (r, g, b);
         }
 
         // sector 0 to 5
         h /= 60;
-        i = (int)Math.Floor(h);
+        int i = (int)Math.Floor(h);
 
         // factorial part of h
-        f = h - i;
-        p = v * (1 - s);
-        q = v * (1 - s * f);
-        t = v * (1 - s * (1 - f));
+        float f = h - i;
+        float p = v * (1 - s);
+        float q = v * (1 - s * f);
+        float t = v * (1 - s * (1 - f));
 
         switch (i)
         {
@@ -111,5 +106,7 @@ public static class ColorHelp
                 b = q;
                 break;
         }
+
+        return (r, g, b);
     }
 }
