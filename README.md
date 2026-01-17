@@ -10,6 +10,9 @@ darkness from color and focusing on the hue allows for colors to avoid becoming 
 
 ## Samples
 
+### Mad Max: Fury Road
+![](samples/mad_max_fury_road.png)
+
 ### Her
 ![](samples/her.jpg)
 
